@@ -1,0 +1,361 @@
+/*
+ * 仅用于 WeasyPrint 生成 PDF（通过 scripts/render_pdf.py 注入），不挂到 MkDocs 默认 extra_css。
+ * WeasyPrint 不执行 JavaScript，Material / print-site 在浏览器里用来隐藏导航的脚本不会运行，
+ * 必须用 CSS 去掉顶栏、侧栏、搜索、GitHub 图标等，否则会出现整页大块黑色矢量图标。
+ */
+
+/*
+ * 正文字体：拉丁文首选 Helvetica Neue。注意：Helvetica Neue 字库本身无中文，在 Apple 生态下与中文搭配的是系统无衬线「苹方」等（与 Helvetica 系视觉一致）。
+ * 栈中在 Helvetica 之后紧跟 PingFang / 冬青黑体 / 微软雅黑，再是 Linux CI 的 Nimbus、Liberation 与 Noto Sans CJK SC（CI 安装 fonts-noto-cjk-sc），
+ * 由 Pango 按字形选用，使中文与 Helvetica Neue 页面风格统一、远端也能显示（CI 安装 Ubuntu 包 fonts-noto-cjk）。
+ * Material 默认 Roboto 通过 :root 变量注入，这里一并覆盖。
+ */
+:root {
+  --docflow-pdf-body-font-family: "Helvetica Neue", "HelveticaNeue", "PingFang SC", "PingFang TC",
+    "Hiragino Sans GB", "Heiti SC", "STHeiti", "Microsoft YaHei UI", "Microsoft YaHei", "Nimbus Sans",
+    "Nimbus Sans L", Helvetica, Arial, "Liberation Sans", "Noto Sans CJK SC", sans-serif;
+  --docflow-pdf-code-font-family: "SF Mono", "Menlo", "Monaco", "Consolas", "Liberation Mono",
+    "Nimbus Mono PS", "Courier New", "PingFang SC", "Noto Sans CJK SC", monospace;
+  --md-text-font: var(--docflow-pdf-body-font-family) !important;
+  --md-code-font: var(--docflow-pdf-code-font-family) !important;
+  --docflow-pdf-text-width: 155mm;
+  --docflow-pdf-text-half: 77.5mm;
+  --docflow-pdf-watermark-width: 60mm;
+  --docflow-pdf-watermark-outdent: 10mm;
+  /*
+   * 水印 left（相对可印区左缘）：理论值 contentHalf − textHalf − outdent；contentHalf ≈ (210mm − 2×侧页边距)/2。
+   * 须用长度字面量或 var，勿用 calc() 连减（WeasyPrint 65 在 position:fixed 的 left 上会错算）。
+   * 与正文左缘间距目标约 10mm 时，在 print-site 默认边距下可用 9.55mm（随版心宽度微调）。
+   */
+  --docflow-pdf-watermark-left: 8.55 mm;
+  /* 对角线文字水印（scripts/render_pdf.py 注入 .docflow-pdf-diagonal-watermark） */
+  --docflow-pdf-diagonal-watermark-color: rgba(230, 100, 100, 0.16);
+  --docflow-pdf-diagonal-watermark-size: 48pt;
+  --docflow-pdf-diagonal-watermark-angle: -42deg;
+}
+
+body,
+.md-typeset,
+#print-site-page,
+#print-site-page .md-typeset {
+  font-family: var(--docflow-pdf-body-font-family) !important;
+}
+
+#print-site-page code,
+#print-site-page pre,
+#print-site-page kbd,
+#print-site-page .highlight pre,
+#print-site-page .highlighttable {
+  font-family: var(--docflow-pdf-code-font-family) !important;
+}
+
+/*
+ * PDF 页眉 logo（scripts/render_pdf.py 注入 .docflow-pdf-margin-header；默认图 docs/static/espressif-standard-logo.png）：
+ * 正文栏 #print-site-page 居中；logo position:fixed，左缘 = 版心左缘 − outdent（默认 1cm），宽约 6cm，压在标题上方条带。
+ * body 仅加大上边距，避免首段与 logo 竖向重叠。
+ */
+@page {
+  size: A4 portrait;
+  /*
+   * 顶边距：给后续页顶行留空。WeasyPrint 中 fixed 的 top 相对可印区上缘计量，水印再用负 top 回到纸张上沿附近。
+   */
+  margin-top: 28mm !important;
+  margin-right: 16mm;
+  margin-bottom: 14mm;
+
+  @top-left {
+    content: none;
+  }
+  @top-right {
+    content: none;
+  }
+  /* 页脚由 scripts/render_pdf.py 注入：居中 当前页/总页数，居右 编译日期；覆盖 print-site-material */
+}
+
+body {
+  box-sizing: border-box;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  /* 首页主标题相对水印再下移一点 */
+  padding-top: 4mm !important;
+}
+
+.docflow-pdf-margin-header {
+  position: fixed;
+  /* 负值：相对可印区上缘上移，使 logo 落在页眉空白 */
+  top: -14mm;
+  left: 0;
+  right: 0;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.docflow-pdf-margin-header img {
+  display: block;
+  margin: 0;
+  margin-left: var(--docflow-pdf-watermark-left);
+  width: var(--docflow-pdf-watermark-width);
+  max-width: var(--docflow-pdf-watermark-width);
+  max-height: 9mm;
+  height: auto;
+  object-fit: contain;
+  object-position: left center;
+}
+
+/* logo 下方黑线：略粗、左右各留约 1.5cm 边距 */
+.docflow-pdf-margin-header::after {
+  content: "";
+  display: block;
+  box-sizing: border-box;
+  margin-left: 10mm;
+  margin-right: 10mm;
+  margin-top: 1.5mm;
+  border-top: 0.6pt solid #000000;
+}
+
+/*
+ * 全页对角线底纹（每页重复）：衬在正文之下，勿挡页眉 logo（logo z-index 更高）。
+ * 文案由 DOCFLOW_PDF_DIAGONAL_WATERMARK 控制；颜色/字号/角度改上面 :root 变量。
+ */
+.docflow-pdf-diagonal-watermark {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: -1;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.docflow-pdf-diagonal-watermark span {
+  display: block;
+  transform: rotate(var(--docflow-pdf-diagonal-watermark-angle));
+  transform-origin: center center;
+  font-size: var(--docflow-pdf-diagonal-watermark-size);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: var(--docflow-pdf-diagonal-watermark-color);
+  white-space: nowrap;
+  font-family: var(--docflow-pdf-body-font-family) !important;
+}
+
+/* 正文区域居中（叠在全页对角线底纹之上由 .md-container 的 z-index 保证） */
+#print-site-page {
+  max-width: var(--docflow-pdf-text-width) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  box-sizing: border-box;
+}
+
+/*
+ * 仅首页主标题：print-site 单 section 内只有第一个 h1 是 :first-child，附录等 h1 前有段落故不匹配。
+ * 略减小上边距以靠近页眉下黑线；换页后的标题主要由 @page 顶边距控制，保持原样。
+ */
+#print-site-page section.print-page > h1:first-child {
+  margin-top: 6mm !important;
+}
+
+/* —— Material 站点外壳（含 Font Awesome / SVG 图标）—— */
+.md-header,
+.md-tabs,
+.md-sidebar,
+.md-drawer,
+.md-dialog,
+.md-footer,
+.md-announce,
+.md-search,
+.md-overlay,
+.md-skip,
+.md-header__source,
+label.md-overlay,
+input.md-toggle {
+  display: none !important;
+}
+
+.md-container {
+  max-width: none !important;
+  position: relative;
+  z-index: 1;
+}
+
+.md-main__inner.md-grid {
+  display: block !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.md-content,
+.md-content__inner {
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* —— print-site 服务端生成的目录块 —— */
+#print-page-toc,
+.print-page-toc-nav,
+#print-page-toc h1.print-page-toc-title,
+h1.print-page-toc-title {
+  display: none !important;
+}
+
+/* —— 正文内超链接：与正文区分（蓝色）；表头内链接保持浅色底上可读 —— */
+#print-site-page a[href] {
+  color: #1565c0 !important;
+  text-decoration: underline !important;
+  text-underline-offset: 0.12em;
+}
+
+#print-site-page thead a[href] {
+  color: #1565c0 !important;
+}
+
+/* —— 正文图片：块级 + 左右 auto 在 PDF 里水平居中 —— */
+#print-site-page img {
+  display: block !important;
+  max-width: 100% !important;
+  height: auto !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* 仅含一张图的段落（常见 Markdown  ![alt](url) ）整体居中，避免行内图无法 margin:auto */
+#print-site-page p:has(> img:only-child) {
+  text-align: center !important;
+}
+
+/*
+ * PDF：标题纯黑、水平居中（仅影响 WeasyPrint 注入的样式，不影响站点默认主题色）。
+ */
+#print-site-page h1,
+#print-site-page h2,
+#print-site-page h3,
+#print-site-page h4,
+#print-site-page h5,
+#print-site-page h6 {
+  color: #000 !important;
+  opacity: 1 !important;
+  text-align: center !important;
+}
+
+/*
+ * 列表：list-style-position outside + 预留左侧给序号，换行后与首行文字左缘对齐（悬挂缩进效果）。
+ * 不再用 inside / 首段 inline，否则长句折行或续段（如第二段 code）会与序号错列。
+ */
+#print-site-page ol,
+#print-site-page ul {
+  margin: 0.5em 0 !important;
+  margin-left: 0 !important;
+  padding-left: 1.75em !important;
+}
+
+#print-site-page ol li,
+#print-site-page ul li {
+  margin-left: 0 !important;
+  padding-left: 0.35em !important;
+  list-style-position: outside;
+}
+
+/* 嵌套列表：在父项内再缩进一层 */
+#print-site-page li > ol,
+#print-site-page li > ul {
+  margin-top: 0.35em !important;
+  margin-bottom: 0.35em !important;
+  padding-left: 1.25em !important;
+}
+
+/* 松散列表 <li><p>…；首段不要顶空一行，段落仍为 block 以对齐折行 */
+#print-site-page li > p:first-child {
+  display: block !important;
+  margin-top: 0 !important;
+  margin-bottom: 0.5em !important;
+}
+
+#print-site-page li > p:only-child {
+  margin-bottom: 0 !important;
+}
+
+#print-site-page li > p + p,
+#print-site-page li > pre,
+#print-site-page li > blockquote,
+#print-site-page li > .highlight,
+#print-site-page li > ol,
+#print-site-page li > ul {
+  display: block !important;
+  margin-top: 0.65em !important;
+}
+
+#print-site-page li > p:last-child:not(:first-child) {
+  margin-bottom: 0 !important;
+}
+
+/*
+ * 分页（需 mkdocs.yml：attr_list；若用 div 包一段需 md_in_html）：
+ * - .pdf-break-before：该元素前另起一页（常用于标题）。
+ * - .pdf-page-block：另起一页，并尽量避免块内再被拆开（适合「非标题短段 + 插图」同页）。
+ *   若块总高度超过一页，引擎仍可能拆分或溢出。
+ */
+#print-site-page .pdf-break-before {
+  break-before: page;
+  page-break-before: always;
+}
+
+#print-site-page .pdf-page-block {
+  display: block;
+  break-before: page;
+  page-break-before: always;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/*
+ * 表格：在 PDF 中水平居中；表头行背景 RGB(127,127,127)，与白字区分于表体。
+ * 注意：MD 里 #print-site-page 嵌在 .md-typeset 内部，不能用「#print-site-page .md-typeset table」
+ *（那是反了），必须直接写 #print-site-page table。
+ */
+#print-site-page table {
+  width: auto !important;
+  max-width: 100% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  border-collapse: collapse !important;
+}
+
+/* 表格外层若在浏览器里有 wrapper，PDF 里一并居中 */
+#print-site-page .md-typeset__scrollwrap table,
+#print-site-page .md-typeset__table table {
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* 表头：黑字；背景用浅灰以与表体区分（深灰底 rgb(127,127,127) 配黑字对比度不足） */
+#print-site-page thead th,
+#print-site-page thead td {
+  background-color: rgb(210, 210, 210) !important;
+  background: rgb(210, 210, 210) !important;
+  color: #000 !important;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+#print-site-page tbody th,
+#print-site-page tbody td {
+  background-color: #fff !important;
+  color: #000 !important;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+#print-site-page th,
+#print-site-page td {
+  border: 1px solid #333 !important;
+  padding: 0.35em 0.65em !important;
+}

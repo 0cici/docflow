@@ -1,0 +1,8 @@
+# Run locally: pip install pre-commit && pre-commit install
+# Run all hooks once: pre-commit run --all-files
+repos:
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        args: [--config, .codespellrc]

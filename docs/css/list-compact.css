@@ -1,0 +1,42 @@
+/*
+ * 有序/无序列表：outside marker + 统一左缘，折行与后续段（如 code）与首行正文对齐。
+ */
+.md-typeset ol,
+.md-typeset ul {
+  margin-left: 0 !important;
+  padding-left: 1.75em !important;
+}
+
+.md-typeset li {
+  list-style-position: outside !important;
+  padding-left: 0.35em !important;
+}
+
+.md-typeset li > p:first-child {
+  display: block !important;
+  margin-top: 0 !important;
+  margin-bottom: 0.5em !important;
+}
+
+.md-typeset li > p:only-child {
+  margin-bottom: 0 !important;
+}
+
+.md-typeset li > p + p,
+.md-typeset li > pre,
+.md-typeset li > blockquote,
+.md-typeset li > .highlight,
+.md-typeset li > ol,
+.md-typeset li > ul {
+  display: block;
+  margin-top: 0.65em !important;
+}
+
+.md-typeset li > p:last-child:not(:first-child) {
+  margin-bottom: 0 !important;
+}
+
+.md-typeset li > ol,
+.md-typeset li > ul {
+  padding-left: 1.25em !important;
+}
