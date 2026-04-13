@@ -1,0 +1,47 @@
+# site_url / repo_url: set MKDOCS_SITE_URL and MKDOCS_REPO_URL (see README). CI sets them automatically.
+site_name: Docflow
+site_url: !ENV [MKDOCS_SITE_URL, 'http://127.0.0.1:8000/']
+repo_url: !ENV [MKDOCS_REPO_URL, '']
+
+docs_dir: docs
+site_dir: site
+
+# 单页 PDF 构建（INHERIT + 仅一条 nav）时，docs/ 下其余 .md 仍会触发「未列入 nav」校验；ignore 避免 mkdocs build --strict 失败。
+validation:
+  nav:
+    omitted_files: ignore
+
+markdown_extensions:
+  - attr_list
+  # 在 HTML 块（如 div.pdf-page-block）内继续解析 Markdown，便于「整段 + 图」同一页
+  - md_in_html
+
+extra_css:
+  - css/list-compact.css
+
+theme:
+  name: material
+  generator: false
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - search
+  # PDF 由 CI/本地在 mkdocs build 后用 WeasyPrint 从 print 页生成（见 .github/workflows/pre_commit.yml）。
+  # mkdocs-pdf-export-plugin 与 Material 的 combined 模式易出现首页空白、内容截断。
+  - print-site:
+      add_to_navigation: false
+      print_page_title: Document (print)
+      add_table_of_contents: false
+      enumerate_headings: false
+      enumerate_figures: false
+
+# 不显式写 nav：由 MkDocs 自动扫描 docs/ 下全部 .md 生成导航，重命名/新增一般无需改配置。
+# 若恢复手写 nav 且只列部分页面，请保留上方 validation.nav.omitted_files: ignore，以免其余 .md 触发校验。

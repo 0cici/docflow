@@ -1,0 +1,4 @@
+[codespell]
+skip = build,.venv,site,*.drawio,*.svg,*.pdf,*.png,*.jpeg,*.jpg
+ignore-words-list = nd
+write-changes = false

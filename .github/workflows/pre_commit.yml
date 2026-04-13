@@ -1,0 +1,161 @@
+# PR / push 到默认主分支: pre-commit（含 codespell）→ MkDocs + PDF → 推送时部署 GitHub Pages
+# 说明: 若只写 master 而仓库默认分支是 main，PR 不会触发，Checks 里看不到 CI。
+name: Pre-commit and docs
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pre-commit:
+    name: Pre-commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pre-commit
+      - uses: pre-commit/action@v3.0.1
+
+  build:
+    name: Build (MkDocs + PDF)
+    needs: pre-commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install WeasyPrint system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libcairo2 \
+            libpango-1.0-0 \
+            libpangocairo-1.0-0 \
+            libgdk-pixbuf2.0-0 \
+            libffi-dev \
+            shared-mime-info \
+            libharfbuzz0b \
+            libjpeg-turbo8 \
+            libopenjp2-7 \
+            fonts-urw-base35 \
+            fonts-liberation \
+            fonts-noto-cjk
+      - run: pip install -r requirements-docs.txt
+      - name: Set MkDocs metadata
+        run: |
+          if [ -n "${{ vars.MKDOCS_SITE_URL }}" ]; then
+            echo "MKDOCS_SITE_URL=${{ vars.MKDOCS_SITE_URL }}" >> "$GITHUB_ENV"
+          else
+            echo "MKDOCS_SITE_URL=https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/" >> "$GITHUB_ENV"
+          fi
+          echo "MKDOCS_REPO_URL=https://github.com/${GITHUB_REPOSITORY}" >> "$GITHUB_ENV"
+      - name: Build MkDocs + PDFs for changed docs/**/*.md
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+          bash scripts/docflow_ci_build.sh "$BASE" "$HEAD"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: site
+
+  # GitHub 不提供 artifact 的永久直链；评论指向本次运行页，在底部 Artifacts 下载 site（pdf/ 下为本次变更的 .md 对应的 PDF，文件名与源 .md 一致）。
+  # 来自 fork 的 PR 默认 token 无写 PR 权限，故跳过（产物仍可在 Actions 运行页下载）。
+  pr-artifact-comment:
+    name: PR comment (artifact link)
+    needs: build
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- docflow-ci: pr-artifact-link -->';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              marker,
+              '',
+              '### 文档构建产物',
+              '',
+              '本次 CI 已上传 **site** 构建包（全量静态站点 + 本次变更的 Markdown 对应的 PDF）。',
+              '',
+              '| 说明 | 内容 |',
+              '|------|------|',
+              '| **PDF** | 下载 `site` 解压后见 `pdf/`：与本次推送/PR 中改动的 `docs/**/*.md` 一一对应（`xxx.md` → `xxx.pdf`） |',
+              '| **下载** | 打开下方链接，在页面底部 **Artifacts** 中下载 **site** |',
+              '',
+              `[**查看本次运行与 Artifacts**](${runUrl})`,
+              '',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((c) => c.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  deploy:
+    name: Deploy GitHub Pages
+    needs: build
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

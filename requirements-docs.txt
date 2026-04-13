@@ -1,0 +1,4 @@
+mkdocs>=1.6,<2
+mkdocs-material>=9.5,<10
+mkdocs-print-site-plugin>=2.8,<3
+weasyprint>=62.0,<66.0
